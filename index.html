@@ -73,8 +73,8 @@
         </header>
 
         <main class="h-[calc(100vh-140px)] overflow-y-auto pb-safe">
-            <!-- Loading Awal -->
-            <div id="buyer-loading" class="text-center py-32 text-brand-500 font-bold flex flex-col items-center">
+            <!-- Loading Awal (DIPERBAIKI: Ditambahkan class buyer-view agar tidak bertumpuk jika user klik menu) -->
+            <div id="buyer-loading" class="buyer-view text-center py-32 text-brand-500 font-bold flex flex-col items-center">
                 <div class="w-12 h-12 border-4 border-brand-100 border-t-brand-600 rounded-full animate-spin mb-4"></div>
                 Memuat Toko...
             </div>
@@ -539,6 +539,7 @@
 
             // ================= UI ROUTING PEMBELI =================
             navigateBuyer: (page) => {
+                // Diperbaiki: Hapus hidden pada target, dan tambah hidden pada view lain (termasuk loading screen)
                 document.querySelectorAll('.buyer-view').forEach(el => el.classList.add('hidden'));
                 const targetEl = document.getElementById(`buyer-${page}`);
                 if (targetEl) targetEl.classList.remove('hidden');
@@ -1061,7 +1062,25 @@
         document.getElementById('search-product').addEventListener('input', app.renderProducts);
         document.getElementById('chk-method').addEventListener('change', app.handlePaymentMethodChange);
 
+        // --- FITUR LOCAL STORAGE CACHE (MEMPERCEPAT LOADING AWAL) ---
+        const checkLocalCache = () => {
+            try {
+                const cachedData = localStorage.getItem('mitragrosir_products_cache');
+                if (cachedData) {
+                    app.products = JSON.parse(cachedData);
+                    document.getElementById('buyer-loading').classList.add('hidden'); // Sembunyikan loading
+                    app.navigateBuyer('home'); // Langsung render produk
+                    app.isInitialBuyerLoad = false; // Tandai bahwa layar sudah di-render menggunakan cache
+                }
+            } catch (err) {
+                console.log("Cache Kosong/Error", err);
+            }
+        };
+
         const initData = async () => {
+            // Cek data di HP pengguna dulu supaya super cepat
+            checkLocalCache();
+
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
                 else await signInAnonymously(auth);
@@ -1073,20 +1092,21 @@
                 if(!user) return;
                 app.currentUser = user; 
 
-                // Subscribe Products
+                // Subscribe Products dari Firebase
                 onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), (snap) => {
                     app.products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
-                    // Hilangkan indikator loading
+                    // Simpan produk ke memori HP (Local Storage) untuk loading di masa depan
+                    try { localStorage.setItem('mitragrosir_products_cache', JSON.stringify(app.products)); } catch(e){}
+                    
                     document.getElementById('buyer-loading').classList.add('hidden');
                     
                     if(!app.isAdminMode) {
-                        // FIX: Jika ini adalah load pertama kali (misal user habis refresh web), langsung otomatis arahkan/buka ke halaman 'home'
                         if (app.isInitialBuyerLoad) {
                             app.navigateBuyer('home');
                             app.isInitialBuyerLoad = false;
                         } else {
-                            // Update produk saja jika sedang di aplikasi
+                            // Cukup update produk tanpa refresh keseluruhan halaman jika sudah berada di aplikasi
                             app.renderProducts(); 
                         }
                     } else {
