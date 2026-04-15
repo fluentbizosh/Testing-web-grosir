@@ -73,7 +73,7 @@
         </header>
 
         <main class="h-[calc(100vh-140px)] overflow-y-auto pb-safe">
-            <!-- Loading Awal (DIPERBAIKI: Ditambahkan class buyer-view agar tidak bertumpuk jika user klik menu) -->
+            <!-- Loading Awal -->
             <div id="buyer-loading" class="buyer-view text-center py-32 text-brand-500 font-bold flex flex-col items-center">
                 <div class="w-12 h-12 border-4 border-brand-100 border-t-brand-600 rounded-full animate-spin mb-4"></div>
                 Memuat Toko...
@@ -495,16 +495,23 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        // PERBAIKAN: Menambahkan fungsi cache bawaan Firebase (initializeFirestore, persistentLocalCache, dll) untuk load super cepat
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         // Konfigurasi Firebase
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "demo", authDomain: "demo", projectId: "demo" };
         const appFirebase = initializeApp(firebaseConfig);
         const auth = getAuth(appFirebase);
-        const db = getFirestore(appFirebase);
+        
+        // PERBAIKAN: Database diinisialisasi dengan Cache Offline bawaan (IndexedDB). 
+        // Ini menggantikan localStorage yang rawan error & sangat dibatasi kapasitasnya.
+        const db = initializeFirestore(appFirebase, {
+            localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+        });
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'b2b-html-app';
 
-        // Kompresi Gambar
+        // Kompresi Gambar (PERBAIKAN: Resolusi dan kualitas diturunkan sedikit agar ukuran string lebih kecil 50%)
         const compressImage = (file) => {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -512,12 +519,12 @@
                 img.onload = () => {
                     URL.revokeObjectURL(objectUrl);
                     const canvas = document.createElement('canvas');
-                    let MAX_WIDTH = 500;
+                    let MAX_WIDTH = 400; // Sebelumnya 500. Diperkecil agar upload dan download database ngacir
                     let width = img.width; let height = img.height;
                     if (width > MAX_WIDTH) { height = Math.round(height * (MAX_WIDTH / width)); width = MAX_WIDTH; }
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+                    resolve(canvas.toDataURL('image/jpeg', 0.5)); // Kualitas sebelumnya 0.6, sekarang 0.5 (sudah sangat cukup)
                 };
                 img.onerror = (error) => { URL.revokeObjectURL(objectUrl); reject(error); };
                 img.src = objectUrl;
@@ -539,12 +546,10 @@
 
             // ================= UI ROUTING PEMBELI =================
             navigateBuyer: (page) => {
-                // Diperbaiki: Hapus hidden pada target, dan tambah hidden pada view lain (termasuk loading screen)
                 document.querySelectorAll('.buyer-view').forEach(el => el.classList.add('hidden'));
                 const targetEl = document.getElementById(`buyer-${page}`);
                 if (targetEl) targetEl.classList.remove('hidden');
 
-                // Update Style Bottom Nav Active Nav
                 ['home', 'history', 'cart'].forEach(p => {
                     const btn = document.getElementById(`nav-bot-${p}`);
                     if(btn) {
@@ -653,7 +658,6 @@
                 app.showNotif('Berhasil masuk keranjang!');
                 app.updateCartBadge();
                 
-                // Tambahan animasi kecil pada ikon keranjang di bawah saat ditambahkan
                 const cartIconAnimate = document.getElementById('cart-icon-animate');
                 if (cartIconAnimate) {
                     cartIconAnimate.classList.add('scale-150', 'text-brand-600');
@@ -1062,25 +1066,7 @@
         document.getElementById('search-product').addEventListener('input', app.renderProducts);
         document.getElementById('chk-method').addEventListener('change', app.handlePaymentMethodChange);
 
-        // --- FITUR LOCAL STORAGE CACHE (MEMPERCEPAT LOADING AWAL) ---
-        const checkLocalCache = () => {
-            try {
-                const cachedData = localStorage.getItem('mitragrosir_products_cache');
-                if (cachedData) {
-                    app.products = JSON.parse(cachedData);
-                    document.getElementById('buyer-loading').classList.add('hidden'); // Sembunyikan loading
-                    app.navigateBuyer('home'); // Langsung render produk
-                    app.isInitialBuyerLoad = false; // Tandai bahwa layar sudah di-render menggunakan cache
-                }
-            } catch (err) {
-                console.log("Cache Kosong/Error", err);
-            }
-        };
-
         const initData = async () => {
-            // Cek data di HP pengguna dulu supaya super cepat
-            checkLocalCache();
-
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
                 else await signInAnonymously(auth);
@@ -1092,12 +1078,9 @@
                 if(!user) return;
                 app.currentUser = user; 
 
-                // Subscribe Products dari Firebase
+                // Subscribe Products dari Firebase (Dengan Cache bawaan, prosesnya instan jika pernah diakses)
                 onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), (snap) => {
                     app.products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    
-                    // Simpan produk ke memori HP (Local Storage) untuk loading di masa depan
-                    try { localStorage.setItem('mitragrosir_products_cache', JSON.stringify(app.products)); } catch(e){}
                     
                     document.getElementById('buyer-loading').classList.add('hidden');
                     
@@ -1106,7 +1089,6 @@
                             app.navigateBuyer('home');
                             app.isInitialBuyerLoad = false;
                         } else {
-                            // Cukup update produk tanpa refresh keseluruhan halaman jika sudah berada di aplikasi
                             app.renderProducts(); 
                         }
                     } else {
@@ -1147,5 +1129,3 @@
     </script>
 </body>
 </html>
-
-```
