@@ -94,19 +94,18 @@
                     </div>
                 </div>
 
-                <!-- Category Pills (Tampilan Saja) -->
+                <!-- Category Pills (Filter Berfungsi) -->
                 <div class="mt-6 px-4">
                     <div class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                        <button class="bg-brand-50 text-brand-700 border border-brand-200 px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap shadow-sm">Semua Produk</button>
-                        <button class="bg-white text-gray-500 border border-gray-200 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap hover:bg-gray-50">Terlaris</button>
-                        <button class="bg-white text-gray-500 border border-gray-200 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap hover:bg-gray-50">Promo</button>
+                        <button id="filter-all" onclick="app.setFilter('all')" class="filter-btn bg-brand-50 text-brand-700 border-brand-200 shadow-sm border px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors">Semua Produk</button>
+                        <button id="filter-promo" onclick="app.setFilter('promo')" class="filter-btn bg-white text-gray-500 border-gray-200 hover:bg-gray-50 border px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1"><i class="ph-fill ph-tag text-red-500"></i> Promo</button>
                     </div>
                 </div>
 
                 <!-- Product Grid -->
                 <div class="px-4 mt-4 mb-6">
                     <div class="flex justify-between items-end mb-3">
-                        <h3 class="font-bold text-lg text-gray-800">Rekomendasi Grosir</h3>
+                        <h3 id="product-section-title" class="font-bold text-lg text-gray-800">Rekomendasi Grosir</h3>
                     </div>
                     <div id="product-grid" class="grid grid-cols-2 gap-3"></div>
                     <div id="no-product-msg" class="hidden text-center py-16">
@@ -490,6 +489,15 @@
                         <p class="text-[9px] text-green-600 mt-2 font-medium leading-tight">Kosongkan jika produk ini tidak memiliki harga grosir otomatis.</p>
                     </div>
 
+                    <!-- Toggle Promo -->
+                    <div class="flex items-center gap-3 p-3 bg-red-50 border border-red-100 rounded-xl">
+                        <input type="checkbox" id="prod-is-promo" class="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-red-300">
+                        <label for="prod-is-promo" class="text-sm font-bold text-red-700 flex flex-col cursor-pointer">
+                            Jadikan Produk Promo
+                            <span class="text-[10px] font-normal text-red-600">Produk akan tampil di tab khusus Promo</span>
+                        </label>
+                    </div>
+
                     <div>
                         <label class="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1 block">Foto Produk</label>
                         <div class="relative border-2 border-dashed border-gray-300 rounded-xl p-3 text-center hover:border-admin-500 transition bg-gray-50">
@@ -564,10 +572,10 @@
         window.app = {
             products: [], orders: [], cart: [], paymentMethods: [],
             currentUser: null, isAdminMode: false, isInitialBuyerLoad: true,
+            currentCategory: 'all', // State untuk filter promo
             
             formatRp: (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0),
             
-            // FUNGSI BARU: Menghitung harga efektif (Normal vs Grosir)
             getEffectivePrice: (item, currentQty) => {
                 if (item.min_wholesale_qty && item.price_wholesale && currentQty >= item.min_wholesale_qty) {
                     return Number(item.price_wholesale);
@@ -613,6 +621,25 @@
                 if(page === 'cart') app.renderCart();
                 if(page === 'checkout') app.renderCheckoutForm();
                 if(page === 'history') app.renderBuyerHistory();
+            },
+
+            setFilter: (category) => {
+                app.currentCategory = category;
+                
+                // Reset style semua tombol filter
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.className = "filter-btn bg-white text-gray-500 border-gray-200 hover:bg-gray-50 border px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1";
+                });
+
+                // Set style tombol aktif
+                const activeBtn = document.getElementById(`filter-${category}`);
+                if (activeBtn) {
+                    activeBtn.className = "filter-btn bg-brand-50 text-brand-700 border-brand-200 shadow-sm border px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors flex items-center gap-1";
+                }
+
+                document.getElementById('product-section-title').textContent = category === 'promo' ? 'Lagi Promo Nih!' : 'Rekomendasi Grosir';
+                
+                app.renderProducts();
             },
 
             // ================= UI ROUTING ADMIN =================
@@ -664,13 +691,20 @@
             // ================= PEMBELI (PRODUK & CART) =================
             renderProducts: () => {
                 const search = document.getElementById('search-product').value.toLowerCase();
-                const filtered = app.products.filter(p => p.name.toLowerCase().includes(search));
+                let filtered = app.products.filter(p => p.name.toLowerCase().includes(search));
+                
+                if (app.currentCategory === 'promo') {
+                    filtered = filtered.filter(p => p.is_promo);
+                }
+
                 document.getElementById('product-grid').innerHTML = filtered.map(p => {
                     const unitLabel = p.unit || 'Pcs';
                     const hasWholesale = p.min_wholesale_qty > 0 && p.price_wholesale > 0;
                     
                     return `
                     <div class="bg-white rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-100 overflow-hidden flex flex-col relative group">
+                        ${p.is_promo ? `<div class="absolute top-2 left-2 z-10 bg-red-500 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md shadow-sm flex items-center gap-1"><i class="ph-fill ph-tag"></i> PROMO</div>` : ''}
+                        
                         <div class="aspect-[4/3] bg-gray-50 relative p-2 flex items-center justify-center">
                             ${p.image_url ? `<img src="${p.image_url}" class="w-full h-full object-contain mix-blend-multiply">` : `<i class="ph-fill ph-image text-5xl text-gray-200"></i>`}
                             ${p.stock <= 0 ? `<div class="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex items-center justify-center"><span class="bg-gray-800 text-white font-bold text-xs px-3 py-1 rounded-full shadow-sm">HABIS</span></div>` : ''}
@@ -847,6 +881,57 @@
                     btn.disabled = false; btn.innerHTML = 'Buat Pesanan <i class="ph-bold ph-check-circle"></i>';
                 }
             },
+            
+            // FUNGSI BARU: Pesan Lagi
+            reorder: (orderId) => {
+                const order = app.orders.find(o => o.id === orderId);
+                if (!order) return;
+
+                let itemsAdded = 0;
+                let itemsSkipped = 0;
+
+                order.items.forEach(pastItem => {
+                    // Cari produk asli di database berdasarkan ID
+                    const currentProduct = app.products.find(p => p.id === pastItem.product_id);
+                    
+                    // Jika produk masih ada dan stok > 0
+                    if (currentProduct && currentProduct.stock > 0) {
+                        // Tambahkan sesuai qty lama ATAU sisa stok (mana yang lebih kecil)
+                        const qtyToAdd = Math.min(pastItem.quantity, currentProduct.stock);
+                        
+                        const existingCartItem = app.cart.find(c => c.id === currentProduct.id);
+                        
+                        if (existingCartItem) {
+                            if (existingCartItem.qty + qtyToAdd <= currentProduct.stock) {
+                                existingCartItem.qty += qtyToAdd;
+                                itemsAdded++;
+                            } else if (existingCartItem.qty < currentProduct.stock) {
+                                existingCartItem.qty = currentProduct.stock; // Max out
+                                itemsAdded++;
+                            } else {
+                                itemsSkipped++; // Sudah max di keranjang
+                            }
+                        } else {
+                            app.cart.push({ ...currentProduct, qty: qtyToAdd });
+                            itemsAdded++;
+                        }
+                    } else {
+                        // Produk dihapus atau stok 0
+                        itemsSkipped++;
+                    }
+                });
+
+                if (itemsAdded > 0) {
+                    app.updateCartBadge();
+                    app.navigateBuyer('cart');
+                    let msg = 'Berhasil ditambahkan ke keranjang.';
+                    if (itemsSkipped > 0) msg += ` (${itemsSkipped} barang stok habis)`;
+                    app.showNotif(msg, 'success');
+                } else {
+                    app.showNotif('Maaf, semua stok barang dari pesanan ini sedang kosong.', 'error');
+                }
+            },
+
             renderBuyerHistory: () => {
                 if(!app.currentUser) return;
                 
@@ -861,7 +946,7 @@
                 const myOrders = app.orders.filter(o => o.user_id === app.currentUser.uid || (myPhone && o.phone === myPhone));
                 
                 document.getElementById('buyer-history-list').innerHTML = myOrders.map(o => `
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col">
                         <div class="flex justify-between items-center border-b border-gray-50 pb-3 mb-3">
                             <span class="text-xs text-gray-500 font-medium flex items-center gap-1"><i class="ph-fill ph-calendar-blank"></i> ${new Date(app.getTime(o.created_at)).toLocaleDateString('id-ID')}</span>
                             <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${getStatusStyle(o.status)} uppercase tracking-wide">${o.status}</span>
@@ -873,13 +958,17 @@
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="flex justify-between items-end pt-3 border-t border-gray-50">
+                        <div class="flex justify-between items-end pt-3 border-t border-gray-50 mb-3">
                             <div>
                                 <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Total & Pembayaran</p>
                                 <p class="text-xs font-bold text-gray-600">${o.payment_method}</p>
                             </div>
                             <span class="font-extrabold text-lg text-brand-600">${app.formatRp(o.total_price)}</span>
                         </div>
+                        <!-- Tombol Pesan Lagi -->
+                        <button onclick="app.reorder('${o.id}')" class="mt-auto w-full py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-600 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-colors border border-brand-100">
+                            <i class="ph-bold ph-arrow-counter-clockwise"></i> Pesan Lagi
+                        </button>
                     </div>
                 `).join('') || `
                     <div class="text-center py-24 flex flex-col items-center">
@@ -921,10 +1010,13 @@
                     <tr class="hover:bg-gray-50/50 transition-colors">
                         <td class="p-4">
                             <div class="flex items-center gap-3">
-                                <div class="w-12 h-12 bg-white border border-gray-100 rounded-lg p-1 flex-shrink-0 flex items-center justify-center shadow-sm">
+                                <div class="w-12 h-12 bg-white border border-gray-100 rounded-lg p-1 flex-shrink-0 flex items-center justify-center shadow-sm relative">
                                     ${p.image_url ? `<img src="${p.image_url}" class="w-full h-full object-contain mix-blend-multiply">` : `<i class="ph-fill ph-image text-gray-300"></i>`}
                                 </div>
-                                <span class="font-bold text-gray-800">${p.name}</span>
+                                <div class="flex flex-col">
+                                    <span class="font-bold text-gray-800">${p.name}</span>
+                                    ${p.is_promo ? `<span class="bg-red-100 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded w-max mt-0.5"><i class="ph-fill ph-tag"></i> PROMO</span>` : ''}
+                                </div>
                             </div>
                         </td>
                         <td class="p-4">
@@ -957,12 +1049,14 @@
                     document.getElementById('prod-min-qty').value = p.min_wholesale_qty || '';
                     document.getElementById('prod-price-wholesale').value = p.price_wholesale || '';
                     document.getElementById('prod-img-existing-url').value = p.image_url || '';
+                    document.getElementById('prod-is-promo').checked = p.is_promo || false;
                 } else {
                     document.getElementById('modal-title').innerHTML = '<i class="ph-fill ph-package text-admin-600"></i> Tambah Produk';
                     document.getElementById('product-form').reset();
                     document.getElementById('prod-id').value = '';
                     document.getElementById('prod-unit').value = 'Pcs'; // Default
                     document.getElementById('prod-img-existing-url').value = '';
+                    document.getElementById('prod-is-promo').checked = false;
                 }
                 modal.classList.remove('hidden');
             },
@@ -990,7 +1084,8 @@
                         unit: document.getElementById('prod-unit').value || 'Pcs',
                         min_wholesale_qty: Number(document.getElementById('prod-min-qty').value) || 0,
                         price_wholesale: Number(document.getElementById('prod-price-wholesale').value) || 0,
-                        image_url: finalImageUrl
+                        image_url: finalImageUrl,
+                        is_promo: document.getElementById('prod-is-promo').checked // Simpan status promo
                     };
 
                     if(id) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id), data);
