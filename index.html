@@ -497,10 +497,22 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         // PERBAIKAN: Menambahkan fungsi cache bawaan Firebase (initializeFirestore, persistentLocalCache, dll) untuk load super cepat
         import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        // Menambahkan modul Firebase Analytics
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-analytics.js";
 
-        // Konfigurasi Firebase
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "demo", authDomain: "demo", projectId: "demo" };
+        // Konfigurasi Firebase Asli Milik Anda
+        const firebaseConfig = {
+            apiKey: "AIzaSyBFH9ShEhLp8DT-qTh4UHlw6r930B60W_w",
+            authDomain: "mitra-grosir-ef7b0.firebaseapp.com",
+            projectId: "mitra-grosir-ef7b0",
+            storageBucket: "mitra-grosir-ef7b0.firebasestorage.app",
+            messagingSenderId: "27133699625",
+            appId: "1:27133699625:web:e63ade897580fe2bf7de38",
+            measurementId: "G-ZNVWM77WQ6"
+        };
+        
         const appFirebase = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(appFirebase);
         const auth = getAuth(appFirebase);
         
         // PERBAIKAN: Database diinisialisasi dengan Cache Offline bawaan (IndexedDB). 
@@ -509,7 +521,8 @@
             localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
         });
         
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'b2b-html-app';
+        // App ID ini digunakan sebagai root folder di database
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mitra-grosir-app';
 
         // Kompresi Gambar (PERBAIKAN: Resolusi dan kualitas diturunkan sedikit agar ukuran string lebih kecil 50%)
         const compressImage = (file) => {
